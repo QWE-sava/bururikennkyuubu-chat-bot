@@ -26,7 +26,7 @@ MODEL_NAME = "meta-llama/llama-4-maverick:free"
 
 # --- データ収集用のGoogle Form設定 ---
 # ⚠️ あなたのGoogle Formの「HTMLを埋め込む」で取得した値に置き換えてください！
-FORM_ACTION_URL = "hhttps://docs.google.com/forms/d/e/1FAIpQLSf03n6xv1fLukql1FsogaT4VD0MW07Q7vhF3GG6Gc4GaFHHSg/formResponse" 
+FORM_ACTION_URL = "https://docs.google.com/forms/d/e/1FAIpQLSf03n6xv1fLukql1FsogaT4VD0MW07Q7vhF3GG6Gc4GaFHHSg/formResponse" 
 
 # フォームの各入力フィールドに対応するID（name="entry.XXXXXX" のXXXXXX部分）
 ENTRY_ID_QUESTION = "entry.1028184207"  
@@ -174,4 +174,5 @@ def index():
 # アプリケーションの実行
 if __name__ == "__main__":
     app.run(debug=True)
+
 
