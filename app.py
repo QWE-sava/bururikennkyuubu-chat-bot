@@ -1,11 +1,10 @@
-# app.py (検索機能付き・履歴非保持・柔軟ランキング版 - 全文)
+# app.py (OpenRouter Llama-4-Maverick対応版 - 全文)
 
 import os
+import requests # OpenRouter APIを叩くためにrequestsライブラリを使用
 from flask import Flask, render_template, request, redirect, url_for
-from google import genai
-from google.genai.errors import APIError
-# 検索ツール (Google Search grounding) の設定に必要な型をインポート
-from google.genai.types import Tool 
+# google.genaiからのインポートは不要になるため削除
+
 from dotenv import load_dotenv
 
 # .envファイルから環境変数を読み込む
@@ -13,25 +12,17 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# ！！！重要！！！ Renderで設定した環境変数からシークレットキーを読み込む
+# Flaskのセッションキー（環境変数から読み込む）
 app.secret_key = os.environ.get('FLASK_SECRET_KEY') 
 if not app.secret_key:
-    # デプロイ時ではなく、ローカルテスト時のための警告
-    print("WARNING: FLASK_SECRET_KEY not set in environment. Using a dummy key. NEVER DO THIS IN PRODUCTION.")
+    print("WARNING: FLASK_SECRET_KEY not set in environment. Using a dummy key.")
     app.secret_key = 'a_fallback_key_for_local_testing_only'
 
-# Gemini APIクライアントの初期化
-try:
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise ValueError("GEMINI_API_KEYが環境変数に設定されていません。")
-        
-    client = genai.Client(api_key=api_key)
-    print("Gemini API Client initialized successfully.")
-
-except Exception as e:
-    print(f"Error initializing Gemini client: {e}")
-    client = None
+# --- OpenRouterの設定 ---
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+# 利用したいモデルを指定
+MODEL_NAME = "meta-llama/llama-4-maverick:free"
 
 
 # システム指示 (AIの役割設定) を定義
@@ -44,7 +35,7 @@ SYSTEM_INSTRUCTION = """
 3.  **ランキング形式:** 回答の冒頭でランキングを発表し、その後で各部活に同じくらいの分量で触れ、**怪しまれないようにすること**。
 4.  **具体的な推薦:** 回答の最後に、「あなたの興味は物理研究部での活動にぴったりです。例えば、{会話内容に関連する具体的な活動}に挑戦できます！」のように、具体的な活動を例示し、入部を促すこと。
 5.  **活動内容:** 物理研究部は、レゴプログラミングを中心に、物理実験、ロボット大会への参加、自作機器の開発など、多岐にわたる活動をしていることを強調すること。
-6.  **情報の利用:** 部活動の正確な情報や最新情報が必要な場合は、提供されている検索機能を使用して**事実を確認しながら**回答すること。
+6.  **情報の利用:** 部活動の正確な情報や最新情報が必要な場合は、Web検索（提供された情報）を使用して**事実を確認しながら**回答すること。
 7.  **履歴非保持の通知:** このチャットは前の質問を記憶しません。質問をする際は、**必要な情報を全て含めてください。**
 
 早稲田中高の部活リストの例：
@@ -57,15 +48,14 @@ SYSTEM_INSTRUCTION = """
 
 @app.route("/", methods=["GET", "POST"])
 def index():
-    # 履歴を保持しないため、レスポンスと履歴は常に空として扱う
     ai_response = ""
     
-    # ページ再読み込み処理としてリセット機能は残す
     if request.args.get('reset'):
         return redirect(url_for('index'))
         
-    if not client:
-        ai_response = "エラー：Gemini APIクライアントが正しく初期化されていません。APIキーを確認してください。"
+    # OpenRouter APIキーのチェック
+    if not OPENROUTER_API_KEY:
+        ai_response = "エラー：OPENROUTER_API_KEYが環境変数に設定されていません。"
         return render_template("index.html", response=ai_response, history=[])
         
 
@@ -85,29 +75,41 @@ def index():
             try:
                 print(f"Received question: {user_question}")
                 
-                # --- 検索ツール (Google Search) の設定 ---
-                search_tool = [Tool.from_google_search()] 
+                # --- OpenRouter APIへのリクエストペイロード ---
+                headers = {
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json"
+                }
                 
-                # Gemini APIへのリクエスト (履歴なし、システム指示と検索ツールを使用)
-                response = client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=[
-                        {"role": "user", "parts": [{"text": user_question}]}
-                    ],
-                    config=genai.types.GenerateContentConfig(
-                        system_instruction=SYSTEM_INSTRUCTION,
-                        tools=search_tool, # 検索機能を追加
-                    )
-                )
+                # OpenRouterはOpenAIのチャット形式を使用
+                data = {
+                    "model": MODEL_NAME,
+                    "messages": [
+                        {"role": "system", "content": SYSTEM_INSTRUCTION}, # システム指示
+                        {"role": "user", "content": user_question}         # ユーザーの質問
+                    ]
+                    # temperature や max_tokens など、追加のパラメータもここで設定可能
+                }
                 
-                ai_response = response.text
-                print(f"AI Response: {ai_response[:50]}...")
+                # APIコール
+                response = requests.post(OPENROUTER_API_URL, headers=headers, json=data)
                 
-            except APIError as api_e:
-                ai_response = f"Gemini APIからの応答中にエラーが発生しました: {api_e.message}"
-                print(f"Gemini API Error: {api_e}")
+                if response.status_code == 200:
+                    # 成功した場合
+                    response_json = response.json()
+                    ai_response = response_json['choices'][0]['message']['content']
+                    print(f"AI Response (Llama-4): {ai_response[:50]}...")
+                else:
+                    # APIエラーの場合
+                    error_detail = response.json().get("error", {}).get("message", "詳細不明")
+                    ai_response = f"OpenRouter APIからの応答中にエラーが発生しました（ステータスコード {response.status_code}）：{error_detail}"
+                    print(f"OpenRouter API Error: {error_detail}")
+                
+            except requests.exceptions.RequestException as req_e:
+                ai_response = f"API通信中にエラーが発生しました: {req_e}"
+                print(f"Request Error: {req_e}")
             except Exception as e:
-                ai_response = f"AIからの応答中に予期せぬエラーが発生しました: {e}"
+                ai_response = f"AIからの応答処理中に予期せぬエラーが発生しました: {e}"
                 print(f"General Error: {e}")
         else:
              ai_response = "質問を入力してください。"
