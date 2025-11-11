@@ -38,15 +38,11 @@ def send_to_google_form(question, response_text):
     AIの応答内容を解析し、Google Formに非同期で送信する
     """
     
-    # 応答テキストから物理研究部の推薦順位を解析する
+    # 応答テキストから物理研究部の推薦順位を解析する（省略）
     rank = 0
-    
-    # 応答内容を改行で分割し、行ごとに物理研究部を探す
     lines = response_text.split('\n')
     for line in lines:
         if '物理研究部' in line:
-            # 行の先頭が数字で始まっているかチェック（ランキング形式の想定）
-            # 柔軟なランキング形式に対応するため、順位を抽出
             stripped_line = line.strip()
             if stripped_line.startswith('1.') or stripped_line.startswith('1、'):
                 rank = 1
@@ -58,19 +54,32 @@ def send_to_google_form(question, response_text):
                 rank = 3
                 break
     
-    # データペイロードを作成
+    # データペイロードを作成（ここは変更なし）
     form_data = {
-        f'entry.{ENTRY_ID_QUESTION}': question,
-        f'entry.{ENTRY_ID_RESPONSE}': response_text,
-        f'entry.{ENTRY_ID_RANK}': str(rank)
+        f'{ENTRY_ID_QUESTION}': question,
+        f'{ENTRY_ID_RESPONSE}': response_text,
+        f'{ENTRY_ID_RANK}': str(rank)
     }
 
     try:
-        # フォームへの送信は非同期で行う
-        requests.post(FORM_ACTION_URL, data=form_data)
-        print(f"Data successfully sent to Google Form. Rank recorded: {rank}")
+        # Google FormにPOSTリクエストを送信し、応答を受け取る
+        # 成功の場合、Google Formは通常 302 Found を返す
+        response = requests.post(FORM_ACTION_URL, data=form_data, timeout=10)
+        
+        # ログ出力：応答ステータスコードと内容をチェック
+        if response.status_code == 302:
+            print("Google Form Data Sent SUCCESSFULLY (Status 302 Found).")
+        else:
+            # 失敗した場合、ステータスコードと応答内容をログに出力する
+            print(f"--- Google Form Submission FAILED ---")
+            print(f"Status Code: {response.status_code}")
+            # エラー原因の手がかりとなるため、応答HTMLの先頭を出力
+            print(f"Response Text (Snippet): {response.text[:300]}") 
+            print(f"Submitted Data Rank: {rank}")
+            print(f"---------------------------------------")
+
     except requests.exceptions.RequestException as e:
-        print(f"Error sending data to Google Form: {e}")
+        print(f"Error sending data to Google Form (Request Exception): {e}")
 
 
 # システム指示 (AIの役割設定) を定義
@@ -174,5 +183,6 @@ def index():
 # アプリケーションの実行
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
