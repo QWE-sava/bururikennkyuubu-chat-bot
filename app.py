@@ -1,7 +1,7 @@
 import os
 import requests 
 from openai import OpenAI
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify # 🚨 jsonify をインポート
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from dotenv import load_dotenv
 import time 
 
@@ -9,7 +9,7 @@ import time
 load_dotenv()
 
 app = Flask(__name__)
-# Flaskのセッションキー（環境変数から読み込む）
+# Flaskのセッションキー
 app.secret_key = os.environ.get('FLASK_SECRET_KEY') 
 if not app.secret_key:
     app.secret_key = 'a_fallback_key_for_local_testing_only'
@@ -158,7 +158,6 @@ def index():
     if not (OPENAI_API_KEY or OPENROUTER_API_KEY):
         initial_message = "【警告】APIキーが設定されていません。動作確認のためには、OpenAIまたはOpenRouterのAPIキーを設定してください。"
     
-    # GETリクエストの場合、ai_responseは常にinitial_messageまたはセッションからのポップアップになる
     ai_response = initial_message 
     
     if request.method == "POST":
@@ -173,7 +172,7 @@ def index():
         
         if current_time - last_time < 5.0:
             print(f"--- [DEBUG: 2] 5秒ルールによりブロックされました。経過時間: {current_time - last_time:.2f}秒 ---")
-            # 🚨 ブロックされた場合はJSONで応答を返す
+            # ブロックされた場合はJSONで応答を返す
             return jsonify({
                  'success': False,
                  'message': '二重送信を検出しました。システムの保護のため、前のリクエストから5秒以上経過してから再度質問してください。'
@@ -200,7 +199,7 @@ def index():
                 ai_response = f"AIからの応答処理中に予期せぬエラーが発生しました: {e}"
                 print(f"General Error: {e}")
                 
-            # 🚨 POST処理の核心：成功/失敗に関わらずJSONで応答を返す
+            # POST処理の核心：成功/失敗に関わらずJSONで応答を返す
             if "エラー：APIクライアント" in ai_response:
                  # AI処理でエラーメッセージが返された場合
                  return jsonify({
@@ -223,7 +222,6 @@ def index():
              }), 400
 
     # GETリクエストの場合のみテンプレートをレンダリング
-    # 応答は常に initial_message になる
     return render_template("index.html", response=ai_response, history=[])
     
 # アプリケーションの実行
