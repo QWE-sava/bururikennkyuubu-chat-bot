@@ -44,7 +44,7 @@
 
     <form id="question-form" method="POST" action="/" novalidate>
         <input type="text" name="question" id="question-input" placeholder="部活の興味を質問してください...">
-        <button type="submit" id="submit-button">質問する</button>
+        <button type="button" id="submit-button">質問する</button> 
     </form>
 
     <script>
@@ -54,22 +54,21 @@
         const input = document.getElementById('question-input');
         const button = document.getElementById('submit-button');
 
-        // フォームの送信処理を定義
-        function handleSubmit(event) {
-            event.preventDefault(); 
-            console.log("--- JS DEBUG: フォーム送信イベント開始 (リスナー経由) ---");
+        // 🚨 ボタンがクリックされた時の処理 (submit イベントではなく click イベント)
+        function handleClick(event) {
+            console.log("--- JS DEBUG: ボタンのクリックイベント発火 (handleClick) ---");
             
             if (button.disabled) {
                 console.log("--- JS DEBUG: ボタンが無効化されているため、実行をキャンセルします ---");
-                return false;
+                return;
             }
 
             const userQuestion = input.value.trim(); 
 
             if (!userQuestion) {
-                console.log("--- JS DEBUG: 入力値が空または空白のみでブロックされました ---");
+                console.log("--- JS DEBUG: 入力値が空でブロックされました ---");
                 alert("質問を入力してください。");
-                return false; 
+                return;
             }
 
             console.log("--- JS DEBUG: 入力チェック通過。フォームを送信します ---");
@@ -84,17 +83,16 @@
             form.submit();
 
             console.log("--- JS DEBUG: form.submit() 実行完了 ---");
-            return true; 
         }
         
         // ページロード完了後にイベントリスナーを設定
         window.onload = function() {
             console.log("--- JS DEBUG: ページロード完了 ---");
             
-            // 🚨 フォームに直接 submit イベントリスナーを設定！
-            if (form) {
-                form.addEventListener('submit', handleSubmit);
-                console.log("--- JS DEBUG: フォームに 'submit' リスナーを設定しました ---");
+            // 🚨 ボタンに直接 'click' イベントリスナーを設定！
+            if (button) {
+                button.addEventListener('click', handleClick); // 👈 ここが click
+                console.log("--- JS DEBUG: ボタンに 'click' リスナーを設定しました ---");
             }
             
             // フォームの有効化（念のため）
@@ -105,8 +103,8 @@
             if (loadingMessage) loadingMessage.style.display = 'none';
         }
         
-        // 旧関数名との互換性確保のために残す
-        window.checkBanAndSetCookie = handleSubmit;
+        // 旧関数名は不要になりますが、念のため残しておきます
+        window.checkBanAndSetCookie = handleClick;
     </script>
 
 </body>
