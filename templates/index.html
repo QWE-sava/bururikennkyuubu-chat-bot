@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="ja">
-<!-- これを見てる人は物理研究部来てほしい -->
 <head>
     <meta charset="UTF-8">
     <title>部活推薦AI</title>
@@ -24,7 +23,7 @@
             display: none; 
         }
         
-        /* 🚨 追加：無効化されたフォーム要素のスタイル */
+        /* 無効化されたフォーム要素のスタイル */
         #question-form[disabled] input, #question-form[disabled] button {
             cursor: not-allowed;
             opacity: 0.6;
@@ -59,20 +58,22 @@
         function checkBanAndSetCookie(event) {
             event.preventDefault(); 
             
-            // 🚨 クライアント側：二重送信防止チェック (すでに無効化されていれば何もしない)
+            // クライアント側：二重送信防止チェック
             if (button.disabled) {
                 console.log("Client side block: Already disabled.");
                 return false;
             }
 
             const currentTime = Date.now();
-            const userQuestion = input.value.trim();
+            const userQuestion = input.value.trim(); 
 
             if (!userQuestion) {
+                // 🚨 ここでブロックされる場合は、入力が空または空白のみ
+                console.log("Input is empty or only whitespace. Stopping submission.");
                 return false;
             }
-
-            // --- 1. 履歴のロードとクリーンアップ (同じ質問3回BANロジック) ---
+            
+            // --- 1. 履歴のロードとクリーンアップ ---
             let history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
             
             for (const key in history) {
@@ -94,7 +95,6 @@
 
             if (currentCount >= MAX_SAME_QUESTION_COUNT) {
                 // 制限回数を超過した場合の処理（ブロック）
-                // ... (BANメッセージ表示ロジックは変更なし)
                 const timeElapsed = currentTime - firstTime;
                 const remainingTimeMs = BAN_DURATION_MS - timeElapsed;
                 const remainingHours = Math.floor(remainingTimeMs / (1000 * 60 * 60));
@@ -118,7 +118,7 @@
             
             // --- 3. ローディング表示とフォーム無効化 (クライアント側二重送信防止) ---
             
-            // 🚨 フォームとボタンを無効化
+            // フォームとボタンを無効化
             input.disabled = true;
             button.disabled = true;
             form.setAttribute('disabled', 'disabled'); // スタイル用
