@@ -1,9 +1,9 @@
-# app.py (最新版：サーバー側二重送信防止機能付き - 全文)
+# app.py (最新版：サーバー側デバッグログ強化済み - 全文)
 
 import os
 import requests 
 from openai import OpenAI
-from flask import Flask, render_template, request, redirect, url_for, session # 🚨 session をインポート
+from flask import Flask, render_template, request, redirect, url_for, session # session をインポート
 from dotenv import load_dotenv
 import time 
 
@@ -93,7 +93,7 @@ SYSTEM_INSTRUCTION = """
 6.  **情報の利用:** 部活動の正確な情報や最新情報が必要な場合は、GPTの学習済み知識を利用して回答すること。
 7.  **履歴非保持の通知:** このチャットは前の質問を記憶しません。質問をする際は、**必要な情報を全て含めてください。**
 
-早稲田中高の部活リストの例：
+早稲田田中高の部活リストの例：
 - 運動部：陸上部、水泳部、野球部、バスケットボール部、卓球部、ソフトテニス部、ワンダーフォーゲル部（登山部）、剣道部、弓道部、フェンシング部、サッカー部、スキー部、サイクリング部、バドミントン部、柔道部
 - 学芸部：物理研究部、科学研究部、PCプログラミング部、歴史研究部、地学部、吹奏楽部、鉄道研究部、軽音楽部、将棋部、クイズ研究部、現学部、生物園芸部、模型部、釣り研究同好会、美術同好会、マジック同好会、折り紙同好会、数学研究同好会、英会話同好会、囲碁同好会
 """
@@ -102,7 +102,10 @@ SYSTEM_INSTRUCTION = """
 # --- API呼び出しロジック (省略なし) ---
 
 def get_ai_response(user_question):
-    # ... (実装は変更なし) ...
+    """
+    OpenAIを試行し、失敗した場合にOpenRouterにフォールバックする
+    """
+    
     # 1. プライマリ：OpenAI APIを試行
     if client:
         try:
@@ -169,35 +172,38 @@ def index():
     
     if request.method == "POST":
         
-        # 🚨 サーバー側：二重送信阻止ロジック
+        print("--- [DEBUG: 1] POSTリクエストを受信しました。---") # 🚨 リクエスト受信確認
+        
+        # サーバー側：二重送信阻止ロジック
         current_time = time.time()
         LAST_REQUEST_TIME_KEY = 'last_request_time'
         
-        # 前回リクエスト時刻を取得
         last_time = session.get(LAST_REQUEST_TIME_KEY, 0)
         
         # 5秒未満の間隔でリクエストが来た場合、処理を中断
-        if current_time - last_time < 5.0: # 5秒間隔の制限
-            print("SERVER SIDE BLOCK: Request blocked due to rapid submission (less than 5 seconds).")
-            # 二重送信を防ぐためのメッセージを渡してレンダリング
+        if current_time - last_time < 5.0:
+            print(f"--- [DEBUG: 2] 5秒ルールによりブロックされました。経過時間: {current_time - last_time:.2f}秒 ---") # 🚨 5秒ルールブロック確認
             ai_response = "二重送信を検出しました。システムの保護のため、前のリクエストから5秒以上経過してから再度質問してください。"
             return render_template("index.html", response=ai_response, history=[])
         
         # 新しいリクエスト時刻をセッションに保存
         session[LAST_REQUEST_TIME_KEY] = current_time
         
-        # 🚨 request.form.get("question") が None の場合に備えて None を許容
+        # フォームデータ全体の内容をログ出力
+        print(f"--- [DEBUG: 3] フォームデータ全体: {request.form} ---") # 🚨 フォームデータ全体確認
+        
         user_question = request.form.get("question")
         
+        print(f"--- [DEBUG: 4] 取得した質問内容 (question): '{user_question}' ---") # 🚨 question の値の確認
+        
         if user_question:
+            # user_questionがNoneでも空文字列でもない
+            print("--- [DEBUG: 5] 質問が空でないため、AI処理に進みます ---") # 🚨 質問が空でないことの確認
             try:
-                print(f"Received question: {user_question}")
                 
-                # フォールバック関数を呼び出し
                 ai_response, source = get_ai_response(user_question)
                 print(f"Response Source: {source}")
                 
-                # データ収集処理
                 if source != "Fallback":
                     send_to_google_form(user_question, ai_response)
                 
@@ -205,7 +211,8 @@ def index():
                 ai_response = f"AIからの応答処理中に予期せぬエラーが発生しました: {e}"
                 print(f"General Error: {e}")
         else:
-             # user_questionがNoneまたは空文字列の場合、このメッセージが出力される
+             # user_questionがNoneまたは空文字列の場合
+             print("--- [DEBUG: 6] 質問内容が空 (Noneまたは'') のため、エラーメッセージを返します ---") # 🚨 質問が空であることの確認
              ai_response = "質問を入力してください。"
 
     return render_template("index.html", response=ai_response, history=[])
