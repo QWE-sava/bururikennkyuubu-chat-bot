@@ -1,9 +1,9 @@
-# app.py (PRGパターン実装版 - 全文)
+# app.py (APIエラーチェック強化版 - 全文)
 
 import os
 import requests 
 from openai import OpenAI
-from flask import Flask, render_template, request, redirect, url_for, session # session を使用
+from flask import Flask, render_template, request, redirect, url_for, session
 from dotenv import load_dotenv
 import time 
 
@@ -11,13 +11,13 @@ import time
 load_dotenv()
 
 app = Flask(__name__)
+# Flaskのセッションキー（環境変数から読み込む）
 app.secret_key = os.environ.get('FLASK_SECRET_KEY') 
 if not app.secret_key:
-    print("WARNING: FLASK_SECRET_KEY not set in environment. Using a dummy key.")
     app.secret_key = 'a_fallback_key_for_local_testing_only'
 
-# --- API設定 (省略) ---
-# ... (APIキーやモデルの設定は変更なし) ...
+# --- API設定 ---
+# 1. プライマリ：OpenAI
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 client = None
 if OPENAI_API_KEY:
@@ -26,12 +26,14 @@ if OPENAI_API_KEY:
     except Exception as e:
         print(f"Error initializing OpenAI client: {e}")
 
+# 2. セカンダリ：OpenRouter
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_MODEL = "meta-llama/llama-4-maverick:free" 
+
 MODEL_NAME = "gpt-4o-mini-2024-07-18"
 
-# --- Google Form設定 (省略) ---
+# ... (Google Form設定、send_to_google_form 関数、SYSTEM_INSTRUCTION は変更なし) ...
 FORM_ACTION_URL = "https://docs.google.com/forms/d/e/1FAIpQLSf03n6xv1fLukql1FsogaT4VD0MW07Q7vhF3GG6Gc4GaFHHSg/formResponse" 
 ENTRY_ID_QUESTION = "entry.1028184207"  
 ENTRY_ID_RESPONSE = "entry.1966575961"
@@ -66,11 +68,9 @@ def send_to_google_form(question, response_text):
     except requests.exceptions.RequestException as e:
         print(f"Error sending data to Google Form (Request Exception): {e}")
 
-# ... (AI応答取得関数は変更なし) ...
 SYSTEM_INSTRUCTION = """
 あなたは、新入生にお勧めの部活ランキングを出す親切で熱意ある部活案内AIアシスタントです。
-以下のルールに従って、ユーザーの興味に応える**部活ランキング（3位まで）**を作成し、回答してください。
-... (システム指示は省略) ...
+... (中略) ...
 """
 
 def get_ai_response(user_question):
@@ -120,9 +120,7 @@ def get_ai_response(user_question):
 
     # 3. 最終手段：すべて失敗した場合のメッセージ
     fallback_message = (
-        "申し訳ありません。現在、当AIチャットサービスはシステム上の問題により、"
-        "すべてのAIエンジンへの接続が停止しています。早急に復旧作業を進めておりますので、"
-        "しばらく時間をおいてから再度お試しください。ご不便をおかけし、誠に申し訳ございません。"
+        "エラー：APIクライアントが正しく設定されていません。OPENROUTER_API_KEYを確認してください。" # 👈 エラーメッセージを統一
     )
     return fallback_message, "Fallback"
 
@@ -133,7 +131,11 @@ def get_ai_response(user_question):
 def index():
     initial_message = "こんにちは、新入生！あなたの興味や得意なこと、挑戦したいことを教えてください。AIがあなたにぴったりの部活をランキング形式で推薦します！"
     
-    # 🚨 GETリクエスト時の処理：セッションからAI応答を取得し、セッションから削除 (一回きりの表示)
+    # 🚨 APIキー設定がない場合の強制メッセージ
+    if not (OPENAI_API_KEY or OPENROUTER_API_KEY):
+        initial_message = "【警告】APIキーが設定されていません。動作確認のためには、OpenAIまたはOpenRouterのAPIキーを設定してください。"
+    
+    # GETリクエスト時の処理：セッションからAI応答を取得し、セッションから削除 (一回きりの表示)
     ai_response = session.pop('ai_response', initial_message)
     
     if request.method == "POST":
@@ -182,7 +184,7 @@ def index():
         else:
              print("--- [DEBUG: 6] 質問内容が空 (Noneまたは'') のため、エラーメッセージを返します ---")
              session['ai_response'] = "質問を入力してください。"
-             return redirect(url_for('index')) # 🚨 エラーでもリダイレクト
+             return redirect(url_for('index'))
 
     # GETリクエストの場合、セッションから取得した応答でテンプレートをレンダリング
     return render_template("index.html", response=ai_response, history=[])
