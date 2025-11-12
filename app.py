@@ -1,9 +1,9 @@
-# app.py (最新版：Cookie/LocalStorage対応 - 全文)
+# app.py (最新版：サーバー側二重送信防止機能付き - 全文)
 
 import os
 import requests 
 from openai import OpenAI
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, session # 🚨 session をインポート
 from dotenv import load_dotenv
 import time 
 
@@ -13,6 +13,7 @@ load_dotenv()
 app = Flask(__name__)
 
 # Flaskのセッションキー（環境変数から読み込む）
+# 🚨 これがないとセッションが使えません
 app.secret_key = os.environ.get('FLASK_SECRET_KEY') 
 if not app.secret_key:
     print("WARNING: FLASK_SECRET_KEY not set in environment. Using a dummy key.")
@@ -49,8 +50,7 @@ def send_to_google_form(question, response_text):
     """
     AIの応答内容を解析し、Google Formに非同期で送信する
     """
-    
-    # 応答テキストから物理研究部の推薦順位を解析する
+    # ... (実装は変更なし) ...
     rank = 0
     lines = response_text.split('\n')
     for line in lines:
@@ -66,7 +66,6 @@ def send_to_google_form(question, response_text):
                 rank = 3
                 break
     
-    # データペイロードを作成
     form_data = {
         f'{ENTRY_ID_QUESTION}': question,
         f'{ENTRY_ID_RESPONSE}': response_text,
@@ -102,10 +101,7 @@ SYSTEM_INSTRUCTION = """
 # --- API呼び出しロジック (省略なし) ---
 
 def get_ai_response(user_question):
-    """
-    OpenAIを試行し、失敗した場合にOpenRouterにフォールバックする
-    """
-    
+    # ... (実装は変更なし) ...
     # 1. プライマリ：OpenAI APIを試行
     if client:
         try:
@@ -171,12 +167,27 @@ def index():
     ai_response = initial_message
     
     if request.method == "POST":
+        
+        # 🚨 サーバー側：二重送信阻止ロジック
+        current_time = time.time()
+        LAST_REQUEST_TIME_KEY = 'last_request_time'
+        
+        # 前回リクエスト時刻を取得
+        last_time = session.get(LAST_REQUEST_TIME_KEY, 0)
+        
+        # 5秒未満の間隔でリクエストが来た場合、処理を中断
+        if current_time - last_time < 5.0: # 5秒間隔の制限
+            print("SERVER SIDE BLOCK: Request blocked due to rapid submission (less than 5 seconds).")
+            # 二重送信を防ぐためのメッセージを渡してレンダリング
+            ai_response = "二重送信を検出しました。システムの保護のため、前のリクエストから5秒以上経過してから再度質問してください。"
+            return render_template("index.html", response=ai_response, history=[])
+        
+        # 新しいリクエスト時刻をセッションに保存
+        session[LAST_REQUEST_TIME_KEY] = current_time
+        
         user_question = request.form.get("question")
         
         if user_question:
-            
-            # --- クライアント側でBAN処理を行うため、サーバー側ロジックはスキップ --- 
-            
             try:
                 print(f"Received question: {user_question}")
                 
