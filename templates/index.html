@@ -1,11 +1,10 @@
 <!DOCTYPE html>
-<!-- これ見た人へ。物理研究部はいいところだぞ！！！ -->
 <html lang="ja">
+<!-- これを見てる人は物理研究部来てほしい -->
 <head>
     <meta charset="UTF-8">
     <title>部活推薦AI</title>
     <style>
-        /* --- 1. CSSの追加・修正 --- */
         body { font-family: sans-serif; max-width: 800px; margin: auto; padding: 20px; }
         .ai-response { white-space: pre-wrap; background-color: #f0f0f0; padding: 15px; border-radius: 5px; margin-top: 20px; }
         .ban-message { color: red; font-weight: bold; margin-top: 15px; }
@@ -13,17 +12,22 @@
         #question-form input[type="text"] { flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px 0 0 5px; }
         #question-form button { padding: 10px 15px; background-color: #4CAF50; color: white; border: none; border-radius: 0 5px 5px 0; cursor: pointer; }
         
-        /* 🚨 追加：ローディングメッセージのスタイル */
         #loading-message {
             margin-top: 20px;
             padding: 15px;
-            background-color: #fff3cd; /* 薄い黄色 */
-            color: #856404; /* 濃い黄色系の文字 */
+            background-color: #fff3cd; 
+            color: #856404; 
             border: 1px solid #ffeeba;
             border-radius: 5px;
             text-align: center;
             font-weight: bold;
-            display: none; /* 初期状態では非表示 */
+            display: none; 
+        }
+        
+        /* 🚨 追加：無効化されたフォーム要素のスタイル */
+        #question-form[disabled] input, #question-form[disabled] button {
+            cursor: not-allowed;
+            opacity: 0.6;
         }
     </style>
 </head>
@@ -41,27 +45,34 @@
 
     <form id="question-form" method="POST" action="/" onsubmit="return checkBanAndSetCookie(event)">
         <input type="text" name="question" id="question-input" placeholder="部活の興味を質問してください..." required>
-        <button type="submit">質問する</button>
+        <button type="submit" id="submit-button">質問する</button>
     </form>
 
     <script>
-        // 24時間 = 24 * 60 * 60 * 1000 ミリ秒
         const BAN_DURATION_MS = 24 * 60 * 60 * 1000;
         const MAX_SAME_QUESTION_COUNT = 3; 
         const STORAGE_KEY = 'question_history';
+        const form = document.getElementById('question-form');
+        const input = document.getElementById('question-input');
+        const button = document.getElementById('submit-button');
 
         function checkBanAndSetCookie(event) {
-            event.preventDefault(); // 一旦送信を止めてJavaScriptで処理
-            const currentTime = Date.now();
+            event.preventDefault(); 
             
-            // ユーザーの入力値を前後の空白を除去して取得
-            const userQuestion = document.getElementById('question-input').value.trim();
+            // 🚨 クライアント側：二重送信防止チェック (すでに無効化されていれば何もしない)
+            if (button.disabled) {
+                console.log("Client side block: Already disabled.");
+                return false;
+            }
+
+            const currentTime = Date.now();
+            const userQuestion = input.value.trim();
 
             if (!userQuestion) {
                 return false;
             }
 
-            // --- 1. 履歴のロードとクリーンアップ ---
+            // --- 1. 履歴のロードとクリーンアップ (同じ質問3回BANロジック) ---
             let history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
             
             for (const key in history) {
@@ -69,10 +80,9 @@
                     delete history[key];
                 }
             }
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
 
-            // ----------------------------------------------------
-            // 2. BAN（制限）チェック
-            // ----------------------------------------------------
+            // --- 2. BAN（制限）チェック ---
             const questionRecord = history[userQuestion];
             let currentCount = 0;
             let firstTime = currentTime;
@@ -84,16 +94,13 @@
 
             if (currentCount >= MAX_SAME_QUESTION_COUNT) {
                 // 制限回数を超過した場合の処理（ブロック）
+                // ... (BANメッセージ表示ロジックは変更なし)
                 const timeElapsed = currentTime - firstTime;
                 const remainingTimeMs = BAN_DURATION_MS - timeElapsed;
                 const remainingHours = Math.floor(remainingTimeMs / (1000 * 60 * 60));
                 const remainingMinutes = Math.ceil((remainingTimeMs % (1000 * 60 * 60)) / (1000 * 60));
                 
-                let timeMessage = "";
-                if (remainingHours > 0) {
-                    timeMessage += `${remainingHours} 時間`;
-                }
-                timeMessage += ` ${remainingMinutes} 分`;
+                let timeMessage = (remainingHours > 0 ? `${remainingHours} 時間` : '') + ` ${remainingMinutes} 分`;
 
                 const banDiv = document.createElement('div');
                 banDiv.className = 'ban-message';
@@ -109,14 +116,17 @@
                 return false; 
             }
             
-            // ----------------------------------------------------
-            // 3. ローディング表示と履歴の更新
-            // ----------------------------------------------------
+            // --- 3. ローディング表示とフォーム無効化 (クライアント側二重送信防止) ---
             
-            // 🚨 ローディングメッセージを表示
+            // 🚨 フォームとボタンを無効化
+            input.disabled = true;
+            button.disabled = true;
+            form.setAttribute('disabled', 'disabled'); // スタイル用
+            
+            // ローディングメッセージを表示
             document.getElementById('loading-message').style.display = 'block';
 
-            // 制限に達していない場合：回数をインクリメントして記録
+            // --- 4. 履歴の更新 ---
             history[userQuestion] = {
                 count: currentCount + 1,
                 first_time: firstTime === currentTime ? currentTime : firstTime
@@ -125,9 +135,18 @@
             // LocalStorageに保存
             localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
 
-            // サーバーへフォーム送信
-            document.getElementById('question-form').submit();
+            // --- 5. サーバーへフォーム送信 ---
+            form.submit();
+        }
+        
+        // ページがロードされたとき、または応答が返ってきたときにフォームを有効化する (念のため)
+        window.onload = function() {
+            input.disabled = false;
+            button.disabled = false;
+            form.removeAttribute('disabled');
+            document.getElementById('loading-message').style.display = 'none';
         }
     </script>
-    </body>
+
+</body>
 </html>
