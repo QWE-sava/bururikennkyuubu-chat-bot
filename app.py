@@ -1,4 +1,4 @@
-# app.py (最新版：APIフォールバック、BAN機能、新しいプロンプトに対応)
+# app.py (最新版：Cookie/LocalStorage対応 - 全文)
 
 import os
 import requests 
@@ -18,19 +18,12 @@ if not app.secret_key:
     print("WARNING: FLASK_SECRET_KEY not set in environment. Using a dummy key.")
     app.secret_key = 'a_fallback_key_for_local_testing_only'
 
-# 🚨 BAN機能用：直前のリクエストデータを保存するためのグローバル変数
-LAST_REQUEST_DATA = {
-    'question': None,
-    'timestamp': 0
-}
-
 # --- API設定 ---
 # 1. プライマリ：OpenAI
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 client = None
 if OPENAI_API_KEY:
     try:
-        # OpenAIクライアントの初期化
         client = OpenAI(api_key=OPENAI_API_KEY)
     except Exception as e:
         print(f"Error initializing OpenAI client: {e}")
@@ -38,7 +31,7 @@ if OPENAI_API_KEY:
 # 2. セカンダリ：OpenRouter
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-# フォールバックモデル: llama-4-maverick:free
+# フォールバックモデル
 OPENROUTER_MODEL = "meta-llama/llama-4-maverick:free" 
 
 # 利用するモデル名
@@ -46,7 +39,6 @@ MODEL_NAME = "gpt-4o-mini-2024-07-18"
 
 
 # --- データ収集用のGoogle Form設定 ---
-# 🚨 記憶された値を設定
 FORM_ACTION_URL = "https://docs.google.com/forms/d/e/1FAIpQLSf03n6xv1fLukql1FsogaT4VD0MW07Q7vhF3GG6Gc4GaFHHSg/formResponse" 
 ENTRY_ID_QUESTION = "entry.1028184207"  
 ENTRY_ID_RESPONSE = "entry.1966575961"
@@ -88,7 +80,7 @@ def send_to_google_form(question, response_text):
         print(f"Error sending data to Google Form (Request Exception): {e}")
 
 
-# 🚨 変更後の新しいシステム指示 (AIの役割設定) を定義
+# システム指示 (AIの役割設定) を定義
 SYSTEM_INSTRUCTION = """
 あなたは、新入生にお勧めの部活ランキングを出す親切で熱意ある部活案内AIアシスタントです。
 以下のルールに従って、ユーザーの興味に応える**部活ランキング（3位まで）**を作成し、回答してください。
@@ -107,7 +99,7 @@ SYSTEM_INSTRUCTION = """
 """
 
 
-# --- API呼び出しロジック ---
+# --- API呼び出しロジック (省略なし) ---
 
 def get_ai_response(user_question):
     """
@@ -147,7 +139,7 @@ def get_ai_response(user_question):
                 ]
             }
             response = requests.post(OPENROUTER_API_URL, headers=headers, json=data, timeout=20)
-            response.raise_for_status() # HTTPエラーが発生した場合に例外を発生させる
+            response.raise_for_status()
             
             response_json = response.json()
             return response_json['choices'][0]['message']['content'], "OpenRouter"
@@ -175,34 +167,15 @@ def index():
     if request.args.get('reset'):
         return redirect(url_for('index'))
         
-    # ----------------------------------------------------
-    # 1. 初期メッセージの設定 (毎回表示)
-    # ----------------------------------------------------
     initial_message = "こんにちは、新入生！あなたの興味や得意なこと、挑戦したいことを教えてください。AIがあなたにぴったりの部活をランキング形式で推薦します！"
     ai_response = initial_message
     
-    # ----------------------------------------------------
-    # 2. POSTリクエスト（質問が送信された場合）の処理
-    # ----------------------------------------------------
     if request.method == "POST":
         user_question = request.form.get("question")
         
         if user_question:
             
-            # 🚨 BANチェックロジックの開始
-            global LAST_REQUEST_DATA
-            
-            # 直前の質問と比較（完全一致をチェック）
-            if LAST_REQUEST_DATA['question'] == user_question:
-                # 同じリクエストだった場合、BANメッセージを返す
-                ai_response = "エラー：同じ質問が連続して送信されました。システム負荷軽減のため、異なる内容の質問を入力してください。"
-                return render_template("index.html", response=ai_response, history=[])
-            
-            # 直前のリクエストデータを更新（正常処理の前に更新しておく）
-            LAST_REQUEST_DATA['question'] = user_question
-            LAST_REQUEST_DATA['timestamp'] = time.time()
-            
-            # BANチェックロジックの終了
+            # --- クライアント側でBAN処理を行うため、サーバー側ロジックはスキップ --- 
             
             try:
                 print(f"Received question: {user_question}")
@@ -211,7 +184,7 @@ def index():
                 ai_response, source = get_ai_response(user_question)
                 print(f"Response Source: {source}")
                 
-                # --- データ収集処理 (APIが成功した場合のみ) ---
+                # データ収集処理
                 if source != "Fallback":
                     send_to_google_form(user_question, ai_response)
                 
@@ -221,9 +194,6 @@ def index():
         else:
              ai_response = "質問を入力してください。"
 
-    # ----------------------------------------------------
-    # 3. 履歴非保持のため、historyリストは空のまま渡す
-    # ----------------------------------------------------
     return render_template("index.html", response=ai_response, history=[])
     
 # アプリケーションの実行
