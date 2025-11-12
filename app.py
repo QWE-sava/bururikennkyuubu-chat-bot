@@ -1,21 +1,18 @@
 import os
 import requests 
 from openai import OpenAI
-from flask import Flask, render_template, request, session, jsonify
+from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
-import time 
+# import time は不要になりました
 
 # .envファイルから環境変数を読み込む
 load_dotenv()
 
 app = Flask(__name__)
-# Flaskのセッションキー（環境変数から読み込む）
+# Flaskのセッションキーは、今回は使わないが、Flask自体に必要なため残す
 app.secret_key = os.environ.get('FLASK_SECRET_KEY') 
 if not app.secret_key:
-    # デバッグ用にフォールバックキーを設定
     app.secret_key = 'a_fallback_key_for_local_testing_only'
-    # 🚨 FLASK_SECRET_KEYが設定されていない場合に、デプロイログに警告を出力
-    print("!!! WARNING: FLASK_SECRET_KEY が設定されていません。フォールバックキーを使用します。このキーがないとバン機能（二重送信防止）が正常に動作しない可能性があります。!!!") 
 
 # --- API設定 ---
 # 1. プライマリ：OpenAI
@@ -35,7 +32,6 @@ OPENROUTER_MODEL = "meta-llama/llama-4-maverick:free"
 MODEL_NAME = "gpt-4o-mini-2024-07-18"
 
 # --- データ収集用のGoogle Form設定 ---
-# ユーザー情報に基づき、フォームURLとIDを設定 [cite: 2025-11-12]
 FORM_ACTION_URL = "https://docs.google.com/forms/d/e/1FAIpQLSf03n6xv1fLukql1FsogaT4VD0MW07Q7vhF3GG6Gc4GaFHHSg/formResponse" 
 ENTRY_ID_QUESTION = "entry.1028184207"  
 ENTRY_ID_RESPONSE = "entry.1966575961"
@@ -47,7 +43,6 @@ def send_to_google_form(question, response_text):
     AIの応答内容を解析し、Google Formに非同期で送信する
     """
     
-    # 応答テキストから物理研究部の推薦順位を解析する
     rank = 0
     lines = response_text.split('\n')
     for line in lines:
@@ -76,7 +71,7 @@ def send_to_google_form(question, response_text):
         print(f"Error sending data to Google Form (Request Exception): {e}")
 
 
-# システム指示 (AIの役割設定) を定義
+# システム指示 (AIの役割設定) を定義 (省略)
 SYSTEM_INSTRUCTION = """
 あなたは、新入生にお勧めの部活ランキングを出す親切で熱意ある部活案内AIアシスタントです。
 以下のルールに従って、ユーザーの興味に応える**部活ランキング（3位まで）**を作成し、回答してください。
@@ -95,7 +90,7 @@ SYSTEM_INSTRUCTION = """
 """
 
 
-# --- API呼び出しロジック (省略なし) ---
+# --- API呼び出しロジック (変更なし) ---
 
 def get_ai_response(user_question):
     """
@@ -152,49 +147,31 @@ def get_ai_response(user_question):
     return fallback_message, "Fallback"
 
 
-#--- ルーティングの設定 (非同期 JSON 応答適用) ---
+#--- ルーティングの設定 (サーバー側バン機能削除) ---
 
 @app.route("/", methods=["GET", "POST"])
 def index():
     initial_message = "こんにちは、新入生！あなたの興味や得意なこと、挑戦したいことを教えてください。AIがあなたにぴったりの部活をランキング形式で推薦します！"
     
-    # APIキー設定がない場合の強制メッセージ (GETリクエスト時のみ)
     if not (OPENAI_API_KEY or OPENROUTER_API_KEY):
         initial_message = "【警告】APIキーが設定されていません。動作確認のためには、OpenAIまたはOpenRouterのAPIキーを設定してください。"
     
     ai_response = initial_message 
     
     if request.method == "POST":
-        # 🚨 POST処理全体を try-except で囲み、HTMLが返されないようにする
+        # 🚨 サーバー側バン機能は削除されました
         try:
             print("--- [DEBUG: 1] POSTリクエストを受信しました。---")
             
-            # サーバー側：二重送信阻止ロジック
-            current_time = time.time()
-            LAST_REQUEST_TIME_KEY = 'last_request_time'
-            last_time = session.get(LAST_REQUEST_TIME_KEY, 0)
-            
-            if current_time - last_time < 5.0:
-                print(f"--- [DEBUG: 2] 5秒ルールによりブロックされました。経過時間: {current_time - last_time:.2f}秒 ---")
-                return jsonify({
-                     'success': False,
-                     'message': '二重送信を検出しました。システムの保護のため、前のリクエストから5秒以上経過してから再度質問してください。'
-                 }), 400
-            
-            session[LAST_REQUEST_TIME_KEY] = current_time
-            
-            print(f"--- [DEBUG: 3] フォームデータ全体: {request.form} ---")
             user_question = request.form.get("question")
-            print(f"--- [DEBUG: 4] 取得した質問内容 (question): '{user_question}' ---")
             
             if not user_question:
-                 print("--- [DEBUG: 6] 質問内容が空 (Noneまたは'') のため、エラーメッセージを返します ---")
                  return jsonify({
                      'success': False,
                      'message': '質問を入力してください。'
                  }), 400
             
-            print("--- [DEBUG: 5] 質問が空でないため、AI処理に進みます ---")
+            print(f"--- [DEBUG: 4] 取得した質問内容 (question): '{user_question}' ---")
             
             ai_response, source = get_ai_response(user_question)
             print(f"Response Source: {source}")
@@ -215,14 +192,13 @@ def index():
                  }), 200
 
         except Exception as e:
-            # 🚨 予期せぬPythonエラー（500 Internal Server Error）が発生した場合
+            # 予期せぬPythonエラー（500 Internal Server Error）が発生した場合
             print(f"--- [DEBUG: 7] 予期せぬPOST処理エラー: {e} ---")
             return jsonify({
                 'success': False,
                 'message': f'予期せぬサーバーエラーが発生しました。コンソールログを確認してください。'
             }), 500
         
-    # GETリクエストの場合のみテンプレートをレンダリング（POSTは決してここまで来ない）
     return render_template("index.html", response=ai_response, history=[])
     
 # アプリケーションの実行
