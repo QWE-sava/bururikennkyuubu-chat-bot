@@ -1,135 +1,95 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>部活推薦AI</title>
-    <style>
-        body { font-family: sans-serif; max-width: 800px; margin: auto; padding: 20px; }
-        .ai-response { white-space: pre-wrap; background-color: #f0f0f0; padding: 15px; border-radius: 5px; margin-top: 20px; }
-        .ban-message { color: red; font-weight: bold; margin-top: 15px; }
-        #question-form { display: flex; margin-top: 20px; }
-        #question-form input[type="text"] { flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px 0 0 5px; }
-        #question-form button { padding: 10px 15px; background-color: #4CAF50; color: white; border: none; border-radius: 0 5px 5px 0; cursor: pointer; }
-        
-        #loading-message {
-            margin-top: 20px;
-            padding: 15px;
-            background-color: #fff3cd; 
-            color: #856404; 
-            border: 1px solid #ffeeba;
-            border-radius: 5px;
-            text-align: center;
-            font-weight: bold;
-            display: none; 
-        }
-        
-        /* 無効化されたフォーム要素のスタイル */
-        #question-form[disabled] input, #question-form[disabled] button {
-            cursor: not-allowed;
-            opacity: 0.6;
-        }
-    </style>
-</head>
-<body>
-
-    <h1>早稲田中学 部活推薦AI（プロトタイプ）</h1>
+<script>
+    console.log("--- JS DEBUG: スクリプトが読み込まれました ---");
     
-    <div class="ai-response">
-        {{ response }}
-    </div>
+    const form = document.getElementById('question-form');
+    const input = document.getElementById('question-input');
+    const button = document.getElementById('submit-button');
 
-    <div id="loading-message">
-        AIが考え中... 少々お待ちください 🤖
-    </div>
-
-    <form id="question-form" method="POST" action="/" novalidate>
-        <input type="text" name="question" id="question-input" placeholder="部活の興味を質問してください...">
-        <button type="submit" id="submit-button">質問する</button> 
-    </form>
-
-    <script>
-        console.log("--- JS DEBUG: スクリプトが読み込まれました ---");
+    // フォームの送信処理を定義 (submit イベント)
+    async function handleSubmit(event) {
+        event.preventDefault(); // 標準の submit 動作を完全にブロック
+        console.log("--- JS DEBUG: フォーム送信イベント開始 (submitリスナー経由) ---");
         
-        const form = document.getElementById('question-form');
-        const input = document.getElementById('question-input');
-        const button = document.getElementById('submit-button');
+        if (button.disabled) {
+            console.log("--- JS DEBUG: ボタンが無効化されているため、実行をキャンセルします ---");
+            return;
+        }
 
-        // フォームの送信処理を定義 (submit イベント)
-        async function handleSubmit(event) {
-            event.preventDefault(); // 標準の submit 動作を完全にブロック
-            console.log("--- JS DEBUG: フォーム送信イベント開始 (submitリスナー経由) ---");
-            
-            if (button.disabled) {
-                console.log("--- JS DEBUG: ボタンが無効化されているため、実行をキャンセルします ---");
-                return;
-            }
+        const userQuestion = input.value.trim(); 
 
-            const userQuestion = input.value.trim(); 
+        if (!userQuestion) {
+            console.log("--- JS DEBUG: 入力値が空でブロックされました ---");
+            alert("質問を入力してください。");
+            return;
+        }
 
-            if (!userQuestion) {
-                console.log("--- JS DEBUG: 入力値が空でブロックされました ---");
-                alert("質問を入力してください。");
-                return;
-            }
+        console.log("--- JS DEBUG: 入力チェック通過。Fetch APIで送信開始 ---");
+        
+        // ローディングと無効化
+        document.getElementById('loading-message').style.display = 'block';
+        input.disabled = true;
+        button.disabled = true;
+        form.setAttribute('disabled', 'disabled');
 
-            console.log("--- JS DEBUG: 入力チェック通過。Fetch APIで送信開始 ---");
-            
-            // ローディングと無効化
-            document.getElementById('loading-message').style.display = 'block';
-            input.disabled = true;
-            button.disabled = true;
-            form.setAttribute('disabled', 'disabled');
+        const formData = new FormData();
+        formData.append('question', userQuestion);
+        
+        try {
+            const response = await fetch('/', {
+                method: 'POST',
+                body: formData 
+            });
 
-            const formData = new FormData();
-            formData.append('question', userQuestion);
-            
-            try {
-                const response = await fetch('/', {
-                    method: 'POST',
-                    body: formData 
-                });
-
-                // 🚨 PRGパターンでは、成功したらサーバーがリダイレクトを返す。クライアント側でのリロードは不要。
-                if (response.ok) {
-                    console.log("--- JS DEBUG: Fetch 成功、サーバーのリダイレクトを待機中 ---");
-                    // サーバーからのリダイレクトレスポンスをブラウザが自動的に処理する
+            // 成功かつリダイレクトが行われたかを確認
+            if (response.ok) {
+                // 🚨 ここが重要：Fetchはリダイレクトを自動追従しないため、手動でジャンプさせる
+                if (response.redirected) {
+                    console.log("--- JS DEBUG: Fetch 成功、サーバーのリダイレクトを検知。手動でジャンプします ---");
+                    window.location.href = response.url; // リダイレクト先のURLに遷移させる
                 } else {
-                    console.error("--- JS DEBUG: Fetch 失敗 (ステータスコード: " + response.status + ") ---");
-                    alert('サーバーエラーが発生しました。コンソールを確認してください。');
+                    console.log("--- JS DEBUG: Fetch 成功。しかしリダイレクトなし。ページをリロードしてGET処理を強制します ---");
+                    window.location.reload(); 
                 }
-
-            } catch (error) {
-                console.error("--- JS DEBUG: ネットワークエラーが発生 ---", error);
-                alert('ネットワークエラーが発生しました。');
+            } else {
+                console.error("--- JS DEBUG: Fetch 失敗 (ステータスコード: " + response.status + ") ---");
+                alert('サーバーエラーが発生しました。コンソールを確認してください。');
+                
+                // 失敗した場合は、フォームを有効化に戻す
+                input.disabled = false;
+                button.disabled = false;
+                form.removeAttribute('disabled');
+                document.getElementById('loading-message').style.display = 'none';
             }
-            
+
+        } catch (error) {
+            console.error("--- JS DEBUG: ネットワークエラーが発生 ---", error);
+            alert('ネットワークエラーが発生しました。');
+
             // 失敗した場合は、フォームを有効化に戻す
             input.disabled = false;
             button.disabled = false;
             form.removeAttribute('disabled');
             document.getElementById('loading-message').style.display = 'none';
+        }
 
-            console.log("--- JS DEBUG: Fetch 実行完了 ---");
+        console.log("--- JS DEBUG: Fetch 実行完了 ---");
+    }
+    
+    window.onload = function() {
+        console.log("--- JS DEBUG: ページロード完了 ---");
+        
+        if (form) {
+            form.addEventListener('submit', handleSubmit);
+            console.log("--- JS DEBUG: フォームに 'submit' リスナーを設定しました ---");
         }
         
-        window.onload = function() {
-            console.log("--- JS DEBUG: ページロード完了 ---");
-            
-            if (form) {
-                form.addEventListener('submit', handleSubmit);
-                console.log("--- JS DEBUG: フォームに 'submit' リスナーを設定しました ---");
-            }
-            
-            // フォームの有効化（念のため）
-            if (input) input.disabled = false;
-            if (button) button.disabled = false;
-            if (form) form.removeAttribute('disabled');
-            const loadingMessage = document.getElementById('loading-message');
-            if (loadingMessage) loadingMessage.style.display = 'none';
-        }
-        
-        window.checkBanAndSetCookie = handleSubmit;
-    </script>
-
-</body>
-</html>
+        // フォームの有効化（念のため）
+        if (input) input.disabled = false;
+        if (button) button.disabled = false;
+        if (form) form.removeAttribute('disabled');
+        const loadingMessage = document.getElementById('loading-message');
+        if (loadingMessage) loadingMessage.style.display = 'none';
+    }
+    
+    window.checkBanAndSetCookie = handleSubmit;
+</script>
