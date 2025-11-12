@@ -1,137 +1,116 @@
 <!DOCTYPE html>
-<!-- これ見てる人にはぜひ物理研究部かPCPに入っていただきたい -->
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🤖 物理研究部 部活推薦AIチャット</title>
+    <title>部活推薦AI</title>
     <style>
-        /* --- 全体スタイル --- */
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f0f4f8; 
-            color: #333;
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            min-height: 100vh;
-        }
-        .container {
-            background-color: #ffffff;
-            padding: 35px;
-            border-radius: 12px;
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
-            width: 100%;
-            max-width: 800px;
-            margin-top: 20px;
-        }
-        h1 {
-            color: #007bff;
-            text-align: center;
-            margin-bottom: 25px;
-            border-bottom: 2px solid #007bff;
-            padding-bottom: 10px;
-        }
-
-        /* --- AI応答エリア (最重要) --- */
-        .ai-response-area {
-            min-height: 350px; /* ある程度の高さを確保 */
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 30px;
-            background-color: #eef3f7; /* 薄い背景色 */
-            white-space: pre-wrap; /* 改行を反映 */
-            line-height: 1.8;
-        }
-        .response-box {
-            font-size: 16px;
-            color: #155724;
-            font-weight: 500;
-        }
-        .initial-message {
-            color: #555;
-            font-style: italic;
-        }
-        
-        /* --- 質問フォーム --- */
-        form {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-        textarea {
-            width: 100%;
-            padding: 15px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            box-sizing: border-box;
-            font-size: 16px;
-            resize: vertical;
-        }
-        button {
-            background-color: #28a745;
-            color: white;
-            padding: 12px 15px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 18px;
-            font-weight: bold;
-            transition: background-color 0.3s, transform 0.1s;
-        }
-        button:hover {
-            background-color: #218838;
-        }
-        button:active {
-            transform: translateY(1px);
-        }
-        
-        /* --- その他 --- */
-        .reset-button {
-            display: inline-block;
-            float: right;
-            padding: 5px 10px;
-            background-color: #007bff; /* 青色に変更 */
-            color: white;
-            text-decoration: none;
-            border-radius: 4px;
-            font-size: 14px;
-            margin-bottom: 15px;
-            transition: background-color 0.3s;
-        }
-        .reset-button:hover {
-            background-color: #0056b3;
-        }
+        /* ここにCSSスタイル */
+        body { font-family: sans-serif; max-width: 800px; margin: auto; padding: 20px; }
+        .ai-response { white-space: pre-wrap; background-color: #f0f0f0; padding: 15px; border-radius: 5px; margin-top: 20px; }
+        .ban-message { color: red; font-weight: bold; margin-top: 15px; }
+        #question-form { display: flex; margin-top: 20px; }
+        #question-form input[type="text"] { flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px 0 0 5px; }
+        #question-form button { padding: 10px 15px; background-color: #4CAF50; color: white; border: none; border-radius: 0 5px 5px 0; cursor: pointer; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>⚙️ 早稲田中学校 部活推薦AIチャット</h1>
-        
-        <a href="{{ url_for('index', reset=1) }}" class="reset-button">新しい質問を始める</a>
-        <div style="clear: both;"></div>
 
-        <div class="ai-response-area">
-            {% if response %}
-                <div class="response-box">
-                    {{ response }}
-                </div>
-            {% else %}
-                <div class="initial-message">
-                    質問を入力し、「AIに質問して推薦を受ける」ボタンを押すと、あなたにぴったりの部活ランキングが表示されます。
-                </div>
-            {% endif %}
-        </div>
-        
-        <form method="POST" action="/">
-            <label for="question">あなたの興味や質問を入力してください:</label>
-            <textarea id="question" name="question" rows="4" placeholder="例: 僕はレゴが好きなんですが、プログラミングもできるでしょうか？" required></textarea>
-            <button type="submit">AIに質問して推薦を受ける</button>
-        </form>
-
+    <h1>早稲田中学 部活推薦AI（プロトタイプ）</h1>
+    
+    <div class="ai-response">
+        {{ response }}
     </div>
-</body>
+
+    <form id="question-form" method="POST" action="/" onsubmit="return checkBanAndSetCookie(event)">
+        <input type="text" name="question" id="question-input" placeholder="部活の興味を質問してください..." required>
+        <button type="submit">質問する</button>
+    </form>
+
+    <script>
+        // 24時間 = 24 * 60 * 60 * 1000 ミリ秒
+        const BAN_DURATION_MS = 24 * 60 * 60 * 1000;
+        const MAX_SAME_QUESTION_COUNT = 3; // 同じ質問の最大回数: 3回
+        const STORAGE_KEY = 'question_history';
+
+        // フォーム送信時に呼ばれるメイン関数
+        function checkBanAndSetCookie(event) {
+            event.preventDefault(); // 一旦送信を止めてJavaScriptで処理
+            const currentTime = Date.now();
+            
+            // ユーザーの入力値を前後の空白を除去して取得
+            const userQuestion = document.getElementById('question-input').value.trim();
+
+            if (!userQuestion) {
+                // 質問が空の場合はそのまま処理を中断
+                return false;
+            }
+
+            // --- 1. 履歴のロードとクリーンアップ ---
+            // LocalStorageから履歴オブジェクトをロード
+            let history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            
+            // 24時間以上経過した古いエントリを削除してクリーンアップ
+            for (const key in history) {
+                if (currentTime - history[key].first_time >= BAN_DURATION_MS) {
+                    delete history[key];
+                }
+            }
+
+            // ----------------------------------------------------
+            // 2. BAN（制限）チェックと履歴の更新
+            // ----------------------------------------------------
+            const questionRecord = history[userQuestion];
+            let currentCount = 0;
+            let firstTime = currentTime;
+
+            if (questionRecord) {
+                currentCount = questionRecord.count;
+                firstTime = questionRecord.first_time;
+            }
+
+            if (currentCount >= MAX_SAME_QUESTION_COUNT) {
+                // 制限回数を超過！
+                
+                const timeElapsed = currentTime - firstTime;
+                const remainingTimeMs = BAN_DURATION_MS - timeElapsed;
+                const remainingHours = Math.floor(remainingTimeMs / (1000 * 60 * 60));
+                const remainingMinutes = Math.ceil((remainingTimeMs % (1000 * 60 * 60)) / (1000 * 60));
+                
+                let timeMessage = "";
+                if (remainingHours > 0) {
+                    timeMessage += `${remainingHours} 時間`;
+                }
+                timeMessage += ` ${remainingMinutes} 分`;
+
+                // エラーメッセージを表示
+                const banDiv = document.createElement('div');
+                banDiv.className = 'ban-message';
+                banDiv.innerHTML = `**アクセス制限**：システム保護のため、同じ質問の再送信回数（${MAX_SAME_QUESTION_COUNT}回）の上限に達しました。誠に恐れ入りますが、**残り約 ${timeMessage}** が経過するか、**質問の内容を変更**してから再度アクセスしてください。**ご注意：この制限はブラウザのLocalStorageで管理されています。**`;
+                
+                const responseDiv = document.querySelector('.ai-response');
+                const existingBan = document.querySelector('.ban-message');
+                if (existingBan) {
+                    existingBan.remove();
+                }
+                responseDiv.parentNode.insertBefore(banDiv, responseDiv.nextElementSibling);
+                
+                return false; // 送信阻止
+            }
+            
+            // 制限に達していない場合：回数をインクリメントして記録
+            history[userQuestion] = {
+                count: currentCount + 1,
+                first_time: firstTime === currentTime ? currentTime : firstTime // 初回アクセス時刻は更新しない
+            };
+
+            // LocalStorageに保存
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+
+            // ----------------------------------------------------
+            // 3. サーバーへフォーム送信
+            // ----------------------------------------------------
+            document.getElementById('question-form').submit();
+        }
+    </script>
+    </body>
 </html>
