@@ -54,8 +54,8 @@
         const input = document.getElementById('question-input');
         const button = document.getElementById('submit-button');
 
-        // 🚨 ボタンがクリックされた時の処理 (submit イベントではなく click イベント)
-        function handleClick(event) {
+        // 🚨 ボタンがクリックされた時の処理 (Fetch APIで非同期通信)
+        async function handleClick(event) {
             console.log("--- JS DEBUG: ボタンのクリックイベント発火 (handleClick) ---");
             
             if (button.disabled) {
@@ -71,7 +71,7 @@
                 return;
             }
 
-            console.log("--- JS DEBUG: 入力チェック通過。フォームを送信します ---");
+            console.log("--- JS DEBUG: 入力チェック通過。Fetch APIで送信開始 ---");
             
             // ローディングと無効化
             document.getElementById('loading-message').style.display = 'block';
@@ -79,10 +79,41 @@
             button.disabled = true;
             form.setAttribute('disabled', 'disabled');
 
-            // サーバーにフォームを強制送信
-            form.submit();
+            // 🚨 FormDataを使ってデータを正しく構築し、Fetchで送信
+            const formData = new FormData();
+            formData.append('question', userQuestion); // 'question' キーに値をセット
+            
+            try {
+                const response = await fetch('/', {
+                    method: 'POST',
+                    body: formData // FormDataを送信
+                });
 
-            console.log("--- JS DEBUG: form.submit() 実行完了 ---");
+                // 成功したらページ全体をリロードし、Flaskからの新しいHTMLを取得
+                if (response.ok) {
+                    console.log("--- JS DEBUG: Fetch 成功、ページリロード中 ---");
+                    window.location.reload(); 
+                } else {
+                    console.error("--- JS DEBUG: Fetch 失敗 (ステータスコード: " + response.status + ") ---");
+                    // 失敗したらフォームを有効化に戻す
+                    input.disabled = false;
+                    button.disabled = false;
+                    form.removeAttribute('disabled');
+                    document.getElementById('loading-message').style.display = 'none';
+                    alert('サーバーエラーが発生しました。コンソールを確認してください。');
+                }
+
+            } catch (error) {
+                console.error("--- JS DEBUG: ネットワークエラーが発生 ---", error);
+                // 失敗したらフォームを有効化に戻す
+                input.disabled = false;
+                button.disabled = false;
+                form.removeAttribute('disabled');
+                document.getElementById('loading-message').style.display = 'none';
+                alert('ネットワークエラーが発生しました。');
+            }
+
+            console.log("--- JS DEBUG: Fetch 実行完了 ---");
         }
         
         // ページロード完了後にイベントリスナーを設定
@@ -91,7 +122,7 @@
             
             // 🚨 ボタンに直接 'click' イベントリスナーを設定！
             if (button) {
-                button.addEventListener('click', handleClick); // 👈 ここが click
+                button.addEventListener('click', handleClick);
                 console.log("--- JS DEBUG: ボタンに 'click' リスナーを設定しました ---");
             }
             
@@ -102,9 +133,6 @@
             const loadingMessage = document.getElementById('loading-message');
             if (loadingMessage) loadingMessage.style.display = 'none';
         }
-        
-        // 旧関数名は不要になりますが、念のため残しておきます
-        window.checkBanAndSetCookie = handleClick;
     </script>
 
 </body>
