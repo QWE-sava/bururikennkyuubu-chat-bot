@@ -1,16 +1,30 @@
 <!DOCTYPE html>
+<!-- これ見た人へ。物理研究部はいいところだぞ！！！ -->
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
     <title>部活推薦AI</title>
     <style>
-        /* ここにCSSスタイル */
+        /* --- 1. CSSの追加・修正 --- */
         body { font-family: sans-serif; max-width: 800px; margin: auto; padding: 20px; }
         .ai-response { white-space: pre-wrap; background-color: #f0f0f0; padding: 15px; border-radius: 5px; margin-top: 20px; }
         .ban-message { color: red; font-weight: bold; margin-top: 15px; }
         #question-form { display: flex; margin-top: 20px; }
         #question-form input[type="text"] { flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px 0 0 5px; }
         #question-form button { padding: 10px 15px; background-color: #4CAF50; color: white; border: none; border-radius: 0 5px 5px 0; cursor: pointer; }
+        
+        /* 🚨 追加：ローディングメッセージのスタイル */
+        #loading-message {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #fff3cd; /* 薄い黄色 */
+            color: #856404; /* 濃い黄色系の文字 */
+            border: 1px solid #ffeeba;
+            border-radius: 5px;
+            text-align: center;
+            font-weight: bold;
+            display: none; /* 初期状態では非表示 */
+        }
     </style>
 </head>
 <body>
@@ -21,6 +35,10 @@
         {{ response }}
     </div>
 
+    <div id="loading-message">
+        AIが考え中... 少々お待ちください 🤖
+    </div>
+
     <form id="question-form" method="POST" action="/" onsubmit="return checkBanAndSetCookie(event)">
         <input type="text" name="question" id="question-input" placeholder="部活の興味を質問してください..." required>
         <button type="submit">質問する</button>
@@ -29,10 +47,9 @@
     <script>
         // 24時間 = 24 * 60 * 60 * 1000 ミリ秒
         const BAN_DURATION_MS = 24 * 60 * 60 * 1000;
-        const MAX_SAME_QUESTION_COUNT = 3; // 同じ質問の最大回数: 3回
+        const MAX_SAME_QUESTION_COUNT = 3; 
         const STORAGE_KEY = 'question_history';
 
-        // フォーム送信時に呼ばれるメイン関数
         function checkBanAndSetCookie(event) {
             event.preventDefault(); // 一旦送信を止めてJavaScriptで処理
             const currentTime = Date.now();
@@ -41,15 +58,12 @@
             const userQuestion = document.getElementById('question-input').value.trim();
 
             if (!userQuestion) {
-                // 質問が空の場合はそのまま処理を中断
                 return false;
             }
 
             // --- 1. 履歴のロードとクリーンアップ ---
-            // LocalStorageから履歴オブジェクトをロード
             let history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
             
-            // 24時間以上経過した古いエントリを削除してクリーンアップ
             for (const key in history) {
                 if (currentTime - history[key].first_time >= BAN_DURATION_MS) {
                     delete history[key];
@@ -57,7 +71,7 @@
             }
 
             // ----------------------------------------------------
-            // 2. BAN（制限）チェックと履歴の更新
+            // 2. BAN（制限）チェック
             // ----------------------------------------------------
             const questionRecord = history[userQuestion];
             let currentCount = 0;
@@ -69,8 +83,7 @@
             }
 
             if (currentCount >= MAX_SAME_QUESTION_COUNT) {
-                // 制限回数を超過！
-                
+                // 制限回数を超過した場合の処理（ブロック）
                 const timeElapsed = currentTime - firstTime;
                 const remainingTimeMs = BAN_DURATION_MS - timeElapsed;
                 const remainingHours = Math.floor(remainingTimeMs / (1000 * 60 * 60));
@@ -82,7 +95,6 @@
                 }
                 timeMessage += ` ${remainingMinutes} 分`;
 
-                // エラーメッセージを表示
                 const banDiv = document.createElement('div');
                 banDiv.className = 'ban-message';
                 banDiv.innerHTML = `**アクセス制限**：システム保護のため、同じ質問の再送信回数（${MAX_SAME_QUESTION_COUNT}回）の上限に達しました。誠に恐れ入りますが、**残り約 ${timeMessage}** が経過するか、**質問の内容を変更**してから再度アクセスしてください。**ご注意：この制限はブラウザのLocalStorageで管理されています。**`;
@@ -94,21 +106,26 @@
                 }
                 responseDiv.parentNode.insertBefore(banDiv, responseDiv.nextElementSibling);
                 
-                return false; // 送信阻止
+                return false; 
             }
             
+            // ----------------------------------------------------
+            // 3. ローディング表示と履歴の更新
+            // ----------------------------------------------------
+            
+            // 🚨 ローディングメッセージを表示
+            document.getElementById('loading-message').style.display = 'block';
+
             // 制限に達していない場合：回数をインクリメントして記録
             history[userQuestion] = {
                 count: currentCount + 1,
-                first_time: firstTime === currentTime ? currentTime : firstTime // 初回アクセス時刻は更新しない
+                first_time: firstTime === currentTime ? currentTime : firstTime
             };
 
             // LocalStorageに保存
             localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
 
-            // ----------------------------------------------------
-            // 3. サーバーへフォーム送信
-            // ----------------------------------------------------
+            // サーバーへフォーム送信
             document.getElementById('question-form').submit();
         }
     </script>
