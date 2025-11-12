@@ -42,8 +42,8 @@
         AIが考え中... 少々お待ちください 🤖
     </div>
 
-    <form id="question-form" method="POST" action="/">
-        <input type="text" name="question" id="question-input" placeholder="部活の興味を質問してください..." required>
+    <form id="question-form" method="POST" action="/" novalidate>
+        <input type="text" name="question" id="question-input" placeholder="部活の興味を質問してください...">
         <button type="submit" id="submit-button">質問する</button>
     </form>
 
@@ -54,9 +54,9 @@
         const input = document.getElementById('question-input');
         const button = document.getElementById('submit-button');
 
-        // 🚨 フォームの送信処理を定義（関数名は変更なし）
+        // フォームの送信処理を定義
         function handleSubmit(event) {
-            event.preventDefault(); // デフォルトのHTML送信動作をブロック
+            event.preventDefault(); 
             console.log("--- JS DEBUG: フォーム送信イベント開始 (リスナー経由) ---");
             
             if (button.disabled) {
@@ -105,7 +105,7 @@
             if (loadingMessage) loadingMessage.style.display = 'none';
         }
         
-        // 旧関数名（on*属性用）との互換性確保のために残す
+        // 旧関数名との互換性確保のために残す
         window.checkBanAndSetCookie = handleSubmit;
     </script>
 
