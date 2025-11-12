@@ -48,103 +48,58 @@
     </form>
 
     <script>
-        const BAN_DURATION_MS = 24 * 60 * 60 * 1000;
-        const MAX_SAME_QUESTION_COUNT = 3; 
-        const STORAGE_KEY = 'question_history';
+        console.log("--- JS DEBUG: スクリプトが読み込まれました ---");
+        
         const form = document.getElementById('question-form');
         const input = document.getElementById('question-input');
         const button = document.getElementById('submit-button');
 
+        // 🚨 BANロジックはデバッグのため一旦無効化（純粋な送信テスト用）
+        // const BAN_DURATION_MS = 24 * 60 * 60 * 1000;
+        // const MAX_SAME_QUESTION_COUNT = 3; 
+        // const STORAGE_KEY = 'question_history';
+
         function checkBanAndSetCookie(event) {
             event.preventDefault(); 
+            console.log("--- JS DEBUG: フォーム送信イベント開始 ---");
             
-            // クライアント側：二重送信防止チェック
+            // フォームの無効化チェック
             if (button.disabled) {
-                console.log("Client side block: Already disabled.");
+                console.log("--- JS DEBUG: ボタンが無効化されているため、実行をキャンセルします ---");
                 return false;
             }
 
-            const currentTime = Date.now();
             const userQuestion = input.value.trim(); 
 
             if (!userQuestion) {
-                // 🚨 ここでブロックされる場合は、入力が空または空白のみ
-                console.log("Input is empty or only whitespace. Stopping submission.");
-                return false;
-            }
-            
-            // --- 1. 履歴のロードとクリーンアップ ---
-            let history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-            
-            for (const key in history) {
-                if (currentTime - history[key].first_time >= BAN_DURATION_MS) {
-                    delete history[key];
-                }
-            }
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
-
-            // --- 2. BAN（制限）チェック ---
-            const questionRecord = history[userQuestion];
-            let currentCount = 0;
-            let firstTime = currentTime;
-
-            if (questionRecord) {
-                currentCount = questionRecord.count;
-                firstTime = questionRecord.first_time;
-            }
-
-            if (currentCount >= MAX_SAME_QUESTION_COUNT) {
-                // 制限回数を超過した場合の処理（ブロック）
-                const timeElapsed = currentTime - firstTime;
-                const remainingTimeMs = BAN_DURATION_MS - timeElapsed;
-                const remainingHours = Math.floor(remainingTimeMs / (1000 * 60 * 60));
-                const remainingMinutes = Math.ceil((remainingTimeMs % (1000 * 60 * 60)) / (1000 * 60));
-                
-                let timeMessage = (remainingHours > 0 ? `${remainingHours} 時間` : '') + ` ${remainingMinutes} 分`;
-
-                const banDiv = document.createElement('div');
-                banDiv.className = 'ban-message';
-                banDiv.innerHTML = `**アクセス制限**：システム保護のため、同じ質問の再送信回数（${MAX_SAME_QUESTION_COUNT}回）の上限に達しました。誠に恐れ入りますが、**残り約 ${timeMessage}** が経過するか、**質問の内容を変更**してから再度アクセスしてください。**ご注意：この制限はブラウザのLocalStorageで管理されています。**`;
-                
-                const responseDiv = document.querySelector('.ai-response');
-                const existingBan = document.querySelector('.ban-message');
-                if (existingBan) {
-                    existingBan.remove();
-                }
-                responseDiv.parentNode.insertBefore(banDiv, responseDiv.nextElementSibling);
-                
+                console.log("--- JS DEBUG: 入力値が空または空白のみでブロックされました ---");
+                alert("質問を入力してください。");
                 return false; 
             }
+
+            // 🚨 ここから下に進めば、サーバーにリクエストが届くはずです
+            console.log("--- JS DEBUG: 入力チェック通過。フォームを送信します ---");
             
-            // --- 3. ローディング表示とフォーム無効化 (クライアント側二重送信防止) ---
-            
-            // フォームとボタンを無効化
+            // ローディングと無効化
+            document.getElementById('loading-message').style.display = 'block';
             input.disabled = true;
             button.disabled = true;
-            form.setAttribute('disabled', 'disabled'); // スタイル用
-            
-            // ローディングメッセージを表示
-            document.getElementById('loading-message').style.display = 'block';
+            form.setAttribute('disabled', 'disabled');
 
-            // --- 4. 履歴の更新 ---
-            history[userQuestion] = {
-                count: currentCount + 1,
-                first_time: firstTime === currentTime ? currentTime : firstTime
-            };
-
-            // LocalStorageに保存
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
-
-            // --- 5. サーバーへフォーム送信 ---
+            // サーバーにフォームを強制送信
             form.submit();
+
+            console.log("--- JS DEBUG: form.submit() 実行完了 ---");
+            return true; 
         }
         
-        // ページがロードされたとき、または応答が返ってきたときにフォームを有効化する (念のため)
         window.onload = function() {
-            input.disabled = false;
-            button.disabled = false;
-            form.removeAttribute('disabled');
-            document.getElementById('loading-message').style.display = 'none';
+            console.log("--- JS DEBUG: ページロード完了 ---");
+            if (input) input.disabled = false;
+            if (button) button.disabled = false;
+            if (form) form.removeAttribute('disabled');
+            const loadingMessage = document.getElementById('loading-message');
+            if (loadingMessage) loadingMessage.style.display = 'none';
         }
     </script>
 
