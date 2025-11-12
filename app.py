@@ -1,7 +1,7 @@
 import os
 import requests 
 from openai import OpenAI
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from flask import Flask, render_template, request, session, jsonify
 from dotenv import load_dotenv
 import time 
 
@@ -9,10 +9,13 @@ import time
 load_dotenv()
 
 app = Flask(__name__)
-# Flaskのセッションキー
+# Flaskのセッションキー（環境変数から読み込む）
 app.secret_key = os.environ.get('FLASK_SECRET_KEY') 
 if not app.secret_key:
+    # デバッグ用にフォールバックキーを設定
     app.secret_key = 'a_fallback_key_for_local_testing_only'
+    # 🚨 FLASK_SECRET_KEYが設定されていない場合に、デプロイログに警告を出力
+    print("!!! WARNING: FLASK_SECRET_KEY が設定されていません。フォールバックキーを使用します。このキーがないとバン機能（二重送信防止）が正常に動作しない可能性があります。!!!") 
 
 # --- API設定 ---
 # 1. プライマリ：OpenAI
@@ -32,6 +35,7 @@ OPENROUTER_MODEL = "meta-llama/llama-4-maverick:free"
 MODEL_NAME = "gpt-4o-mini-2024-07-18"
 
 # --- データ収集用のGoogle Form設定 ---
+# ユーザー情報に基づき、フォームURLとIDを設定 [cite: 2025-11-12]
 FORM_ACTION_URL = "https://docs.google.com/forms/d/e/1FAIpQLSf03n6xv1fLukql1FsogaT4VD0MW07Q7vhF3GG6Gc4GaFHHSg/formResponse" 
 ENTRY_ID_QUESTION = "entry.1028184207"  
 ENTRY_ID_RESPONSE = "entry.1966575961"
@@ -161,67 +165,64 @@ def index():
     ai_response = initial_message 
     
     if request.method == "POST":
-        
-        print("--- [DEBUG: 1] POSTリクエストを受信しました。---")
-        
-        # サーバー側：二重送信阻止ロジック
-        current_time = time.time()
-        LAST_REQUEST_TIME_KEY = 'last_request_time'
-        
-        last_time = session.get(LAST_REQUEST_TIME_KEY, 0)
-        
-        if current_time - last_time < 5.0:
-            print(f"--- [DEBUG: 2] 5秒ルールによりブロックされました。経過時間: {current_time - last_time:.2f}秒 ---")
-            # ブロックされた場合はJSONで応答を返す
-            return jsonify({
-                 'success': False,
-                 'message': '二重送信を検出しました。システムの保護のため、前のリクエストから5秒以上経過してから再度質問してください。'
-             }), 400
-        
-        session[LAST_REQUEST_TIME_KEY] = current_time
-        
-        print(f"--- [DEBUG: 3] フォームデータ全体: {request.form} ---")
-        
-        user_question = request.form.get("question")
-        
-        print(f"--- [DEBUG: 4] 取得した質問内容 (question): '{user_question}' ---")
-        
-        if user_question:
+        # 🚨 POST処理全体を try-except で囲み、HTMLが返されないようにする
+        try:
+            print("--- [DEBUG: 1] POSTリクエストを受信しました。---")
+            
+            # サーバー側：二重送信阻止ロジック
+            current_time = time.time()
+            LAST_REQUEST_TIME_KEY = 'last_request_time'
+            last_time = session.get(LAST_REQUEST_TIME_KEY, 0)
+            
+            if current_time - last_time < 5.0:
+                print(f"--- [DEBUG: 2] 5秒ルールによりブロックされました。経過時間: {current_time - last_time:.2f}秒 ---")
+                return jsonify({
+                     'success': False,
+                     'message': '二重送信を検出しました。システムの保護のため、前のリクエストから5秒以上経過してから再度質問してください。'
+                 }), 400
+            
+            session[LAST_REQUEST_TIME_KEY] = current_time
+            
+            print(f"--- [DEBUG: 3] フォームデータ全体: {request.form} ---")
+            user_question = request.form.get("question")
+            print(f"--- [DEBUG: 4] 取得した質問内容 (question): '{user_question}' ---")
+            
+            if not user_question:
+                 print("--- [DEBUG: 6] 質問内容が空 (Noneまたは'') のため、エラーメッセージを返します ---")
+                 return jsonify({
+                     'success': False,
+                     'message': '質問を入力してください。'
+                 }), 400
+            
             print("--- [DEBUG: 5] 質問が空でないため、AI処理に進みます ---")
-            try:
-                ai_response, source = get_ai_response(user_question)
-                print(f"Response Source: {source}")
-                
-                if source != "Fallback":
-                    send_to_google_form(user_question, ai_response)
-                
-            except Exception as e:
-                ai_response = f"AIからの応答処理中に予期せぬエラーが発生しました: {e}"
-                print(f"General Error: {e}")
-                
-            # POST処理の核心：成功/失敗に関わらずJSONで応答を返す
+            
+            ai_response, source = get_ai_response(user_question)
+            print(f"Response Source: {source}")
+            
+            if source != "Fallback":
+                send_to_google_form(user_question, ai_response)
+            
+            # 成功またはAPIキーエラーメッセージの場合
             if "エラー：APIクライアント" in ai_response:
-                 # AI処理でエラーメッセージが返された場合
                  return jsonify({
                      'success': False,
                      'message': ai_response
-                 }), 503 # Service Unavailable
+                 }), 503
             else:
-                 # 正常な応答が返された場合
                  return jsonify({
                      'success': True,
                      'response': ai_response
                  }), 200
-            
-        else:
-             print("--- [DEBUG: 6] 質問内容が空 (Noneまたは'') のため、エラーメッセージを返します ---")
-             # 質問が空でもJSONでエラーを返す
-             return jsonify({
-                 'success': False,
-                 'message': '質問を入力してください。'
-             }), 400
 
-    # GETリクエストの場合のみテンプレートをレンダリング
+        except Exception as e:
+            # 🚨 予期せぬPythonエラー（500 Internal Server Error）が発生した場合
+            print(f"--- [DEBUG: 7] 予期せぬPOST処理エラー: {e} ---")
+            return jsonify({
+                'success': False,
+                'message': f'予期せぬサーバーエラーが発生しました。コンソールログを確認してください。'
+            }), 500
+        
+    # GETリクエストの場合のみテンプレートをレンダリング（POSTは決してここまで来ない）
     return render_template("index.html", response=ai_response, history=[])
     
 # アプリケーションの実行
