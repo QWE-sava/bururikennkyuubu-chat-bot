@@ -50,7 +50,8 @@ def send_to_google_form(question, response_text):
     """
     AIの応答内容を解析し、Google Formに非同期で送信する
     """
-    # ... (実装は変更なし) ...
+    
+    # 応答テキストから物理研究部の推薦順位を解析する
     rank = 0
     lines = response_text.split('\n')
     for line in lines:
@@ -185,6 +186,7 @@ def index():
         # 新しいリクエスト時刻をセッションに保存
         session[LAST_REQUEST_TIME_KEY] = current_time
         
+        # 🚨 request.form.get("question") が None の場合に備えて None を許容
         user_question = request.form.get("question")
         
         if user_question:
@@ -203,6 +205,7 @@ def index():
                 ai_response = f"AIからの応答処理中に予期せぬエラーが発生しました: {e}"
                 print(f"General Error: {e}")
         else:
+             # user_questionがNoneまたは空文字列の場合、このメッセージが出力される
              ai_response = "質問を入力してください。"
 
     return render_template("index.html", response=ai_response, history=[])
