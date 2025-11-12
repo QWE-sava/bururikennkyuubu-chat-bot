@@ -1,7 +1,9 @@
-# app.py (OpenRouter対応・データ収集機能付き・全文)
+# app.py (OpenAI API 直結 GPT-4o-mini対応版 - 全文)
 
 import os
+# 🚨 変更点：requestsの代わりにopenaiライブラリを使用
 import requests 
+from openai import OpenAI # OpenAI APIクライアント
 from flask import Flask, render_template, request, redirect, url_for
 from dotenv import load_dotenv
 
@@ -10,32 +12,40 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# ！！！重要！！！ Renderで設定した環境変数からシークレットキーを読み込む
+# Flaskのセッションキー（環境変数から読み込む）
 app.secret_key = os.environ.get('FLASK_SECRET_KEY') 
 if not app.secret_key:
-    # デプロイ時ではなく、ローカルテスト時のための警告
     print("WARNING: FLASK_SECRET_KEY not set in environment. Using a dummy key.")
     app.secret_key = 'a_fallback_key_for_local_testing_only'
 
-# --- OpenRouterの設定 ---
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-# 利用したいモデルを指定
-MODEL_NAME = "meta-llama/llama-4-maverick:free"
+# --- OpenAIの設定 ---
+# 🚨 変更点：環境変数名を OPENAI_API_KEY に変更してキーを読み込む
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+
+# 🚨 変更点：クライアントの初期化（APIキーが設定されている場合のみ）
+client = None
+if OPENAI_API_KEY:
+    try:
+        client = OpenAI(api_key=OPENAI_API_KEY)
+    except Exception as e:
+        print(f"Error initializing OpenAI client: {e}")
+
+# 利用するモデル名
+MODEL_NAME = "gpt-4o-mini-2024-07-18"
 
 
 # --- データ収集用のGoogle Form設定 ---
 # ⚠️ あなたのGoogle Formの「HTMLを埋め込む」で取得した値に置き換えてください！
-FORM_ACTION_URL = "https://docs.google.com/forms/d/e/1FAIpQLSf03n6xv1fLukql1FsogaT4VD0MW07Q7vhF3GG6Gc4GaFHHSg/formResponse" 
-
+FORM_ACTION_URL = "ここにあなたのGoogle Formの 'formResponse' URLを貼り付けます" 
 # フォームの各入力フィールドに対応するID（name="entry.XXXXXX" のXXXXXX部分）
-ENTRY_ID_QUESTION = "entry.1028184207"  
-ENTRY_ID_RESPONSE = "entry.1966575961"
-ENTRY_ID_RANK     = "entry.2026372673" 
+ENTRY_ID_QUESTION = "ここにユーザー質問の 'entry.XXXXXX' を貼り付けます"  
+ENTRY_ID_RESPONSE = "ここにAI応答の 'entry.XXXXXX' を貼り付けます"
+ENTRY_ID_RANK     = "ここに推薦順位の 'entry.XXXXXX' を貼り付けます" 
+
 
 def send_to_google_form(question, response_text):
     """
-    AIの応答内容を解析し、Google Formに非同期で送信する（ログ出力はシンプルに）
+    AIの応答内容を解析し、Google Formに非同期で送信する
     """
     
     # 応答テキストから物理研究部の推薦順位を解析する
@@ -44,6 +54,7 @@ def send_to_google_form(question, response_text):
     for line in lines:
         if '物理研究部' in line:
             stripped_line = line.strip()
+            # 1. 2. 3. や 1、 2、 3、 の形式を検出
             if stripped_line.startswith('1.') or stripped_line.startswith('1、'):
                 rank = 1
                 break
@@ -55,7 +66,6 @@ def send_to_google_form(question, response_text):
                 break
     
     # データペイロードを作成
-    # ⚠️ 以下のENTRY_ID_... 定数には、正しい値が設定されていることが前提です。
     form_data = {
         f'{ENTRY_ID_QUESTION}': question,
         f'{ENTRY_ID_RESPONSE}': response_text,
@@ -63,27 +73,25 @@ def send_to_google_form(question, response_text):
     }
 
     try:
-        # フォームへの送信は非同期で行い、アプリの速度に影響を与えないようにする
-        # timeout を設定し、ネットワーク遅延でアプリが止まるのを防ぎます
+        # requestsライブラリはGoogle Formへの送信に引き続き使用
         requests.post(FORM_ACTION_URL, data=form_data, timeout=5)
         print(f"Data successfully sent to Google Form. Rank recorded: {rank}")
     except requests.exceptions.RequestException as e:
-        # 送信失敗はログに残しますが、ユーザー体験に影響は与えません
         print(f"Error sending data to Google Form (Request Exception): {e}")
+
 
 # システム指示 (AIの役割設定) を定義
 SYSTEM_INSTRUCTION = """
-あなたは、早稲田中学校の新入生に合う部活を新入生に強く推薦する、親切で熱意ある部活案内AIアシスタントです。
+あなたは、新入生にお勧めの部活ランキングを出すAIという名目で早稲田中学校の「物理研究部（レゴプログラミング班）」を新入生に強く推薦する、親切で熱意ある部活案内AIアシスタントです。
 以下のルールに従って、ユーザーの興味に応える**部活ランキング（3位まで）**を作成し、回答してください。
 
-1.  **ペルソナ:** 優しく、博識な先輩のように、活発で情熱的で誠実な口調で話すこと。
-2.  **推薦の優先度:** 特にどの部活にも忖度せずランキングを作成すること。
+1.  **ペルソナ:** 物理研究部の現役部員のような、活発で情熱的で誠実な口調で話すこと。
+2.  **推薦の優先度:** ある程度物理研究部と絡められるようなら物理研究部をランキングに入れること。
 3.  **ランキング形式:** 回答の冒頭でランキングを発表し、その後で各部活に同じくらいの分量で触れ、**怪しまれないようにすること**。
-4.  **具体的な推薦:** 回答の最後に、「あなたの興味は（一位の部活）での活動にぴったりです。例えば、{会話内容に関連する具体的な活動}に挑戦できます！」のように、具体的な活動を例示し、入部を促すこと。
-5.  **活動内容:** 一応この作品は物理研究部の作品なので物理研究部の活動内容を教えておきます。→物理研究部は、レゴプログラミングを中心に、物理実験、ロボット大会への参加、自作機器の開発など、多岐にわたる活動をしている。また3Dプリンターやレーザープリンターなど新しい機器も取り扱っている。
+4.  **具体的な推薦:** 回答の最後に、「あなたの興味は物理研究部での活動にぴったりです。例えば、{会話内容に関連する具体的な活動}に挑戦できます！」のように、具体的な活動を例示し、入部を促すこと。
+5.  **活動内容:** 物理研究部は、レゴプログラミングを中心に、物理実験、ロボット大会への参加、自作機器の開発など、多岐にわたる活動をしていることを強調すること。
 6.  **情報の利用:** 部活動の正確な情報や最新情報が必要な場合は、Web検索（提供された情報）を使用して**事実を確認しながら**回答すること。
 7.  **履歴非保持の通知:** このチャットは前の質問を記憶しません。質問をする際は、**必要な情報を全て含めてください。**
-8.  ハルネーション　　このサイトはAIを使用しているためハルネーションが含まれる場合があるので、実際の情報は検索してください。と加えること。
 
 早稲田中高の部活リストの例：
 - 運動部：陸上部、水泳部、野球部、バスケットボール部、卓球部、ソフトテニス部、ワンダーフォーゲル部（登山部）、剣道部、弓道部、フェンシング部、サッカー部、スキー部、サイクリング部、バドミントン部、柔道部
@@ -97,13 +105,12 @@ SYSTEM_INSTRUCTION = """
 def index():
     ai_response = ""
     
-    # ページ再読み込み処理としてリセット機能は残す
     if request.args.get('reset'):
         return redirect(url_for('index'))
         
-    # APIキーのチェック
-    if not OPENROUTER_API_KEY:
-        ai_response = "エラー：APIクライアントが正しく設定されていません。OPENROUTER_API_KEYを確認してください。"
+    # 🚨 変更点：OpenAIクライアントのチェック
+    if not client:
+        ai_response = "エラー：OpenAI APIキーが環境変数に設定されていないか、クライアントの初期化に失敗しました。"
         return render_template("index.html", response=ai_response, history=[])
         
 
@@ -123,45 +130,26 @@ def index():
             try:
                 print(f"Received question: {user_question}")
                 
-                # --- OpenRouter APIへのリクエストペイロード ---
-                headers = {
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json"
-                }
-                
-                # OpenRouterはOpenAIのチャット形式を使用
-                data = {
-                    "model": MODEL_NAME,
-                    "messages": [
-                        {"role": "system", "content": SYSTEM_INSTRUCTION}, # システム指示
-                        {"role": "user", "content": user_question}         # ユーザーの質問
+                # 🚨 変更点：OpenAI API呼び出し
+                completion = client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_INSTRUCTION},
+                        {"role": "user", "content": user_question}
                     ]
-                }
+                )
                 
-                # APIコール
-                response = requests.post(OPENROUTER_API_URL, headers=headers, json=data)
+                # 応答の解析
+                ai_response = completion.choices[0].message.content
                 
-                if response.status_code == 200:
-                    # 成功した場合
-                    response_json = response.json()
-                    ai_response = response_json['choices'][0]['message']['content']
-                    
-                    # --- データ収集処理 ---
-                    send_to_google_form(user_question, ai_response)
-                    
-                    print(f"AI Response (Llama-4): {ai_response[:50]}...")
-                else:
-                    # APIエラーの場合 (401など)
-                    error_detail = response.json().get("error", {}).get("message", "詳細不明")
-                    ai_response = f"OpenRouter APIからの応答中にエラーが発生しました（ステータスコード {response.status_code}）：{error_detail}"
-                    print(f"OpenRouter API Error: {error_detail}")
+                # --- データ収集処理 ---
+                send_to_google_form(user_question, ai_response)
                 
-            except requests.exceptions.RequestException as req_e:
-                ai_response = f"API通信中にエラーが発生しました: {req_e}"
-                print(f"Request Error: {req_e}")
+                print(f"AI Response (OpenAI): {ai_response[:50]}...")
+                
             except Exception as e:
-                ai_response = f"AIからの応答処理中に予期せぬエラーが発生しました: {e}"
-                print(f"General Error: {e}")
+                ai_response = f"OpenAI APIからの応答中にエラーが発生しました: {e}"
+                print(f"OpenAI API Error: {e}")
         else:
              ai_response = "質問を入力してください。"
 
@@ -173,9 +161,3 @@ def index():
 # アプリケーションの実行
 if __name__ == "__main__":
     app.run(debug=True)
-
-
-
-
-
-
