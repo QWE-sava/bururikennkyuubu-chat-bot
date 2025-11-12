@@ -36,11 +36,11 @@ MODEL_NAME = "gpt-4o-mini-2024-07-18"
 
 # --- データ収集用のGoogle Form設定 ---
 # ⚠️ あなたのGoogle Formの「HTMLを埋め込む」で取得した値に置き換えてください！
-FORM_ACTION_URL = "ここにあなたのGoogle Formの 'formResponse' URLを貼り付けます" 
+FORM_ACTION_URL = "https://docs.google.com/forms/d/e/1FAIpQLSf03n6xv1fLukql1FsogaT4VD0MW07Q7vhF3GG6Gc4GaFHHSg/formResponse" 
 # フォームの各入力フィールドに対応するID（name="entry.XXXXXX" のXXXXXX部分）
-ENTRY_ID_QUESTION = "ここにユーザー質問の 'entry.XXXXXX' を貼り付けます"  
-ENTRY_ID_RESPONSE = "ここにAI応答の 'entry.XXXXXX' を貼り付けます"
-ENTRY_ID_RANK     = "ここに推薦順位の 'entry.XXXXXX' を貼り付けます" 
+ENTRY_ID_QUESTION = "entry.1028184207"  
+ENTRY_ID_RESPONSE = "entry.1966575961"
+ENTRY_ID_RANK     = "entry.2026372673" 
 
 
 def send_to_google_form(question, response_text):
@@ -80,7 +80,6 @@ def send_to_google_form(question, response_text):
         print(f"Error sending data to Google Form (Request Exception): {e}")
 
 
-# システム指示 (AIの役割設定) を定義
 SYSTEM_INSTRUCTION = """
 あなたは、新入生にお勧めの部活ランキングを出すAIという名目で早稲田中学校の「物理研究部（レゴプログラミング班）」を新入生に強く推薦する、親切で熱意ある部活案内AIアシスタントです。
 以下のルールに従って、ユーザーの興味に応える**部活ランキング（3位まで）**を作成し、回答してください。
@@ -90,7 +89,7 @@ SYSTEM_INSTRUCTION = """
 3.  **ランキング形式:** 回答の冒頭でランキングを発表し、その後で各部活に同じくらいの分量で触れ、**怪しまれないようにすること**。
 4.  **具体的な推薦:** 回答の最後に、「あなたの興味は物理研究部での活動にぴったりです。例えば、{会話内容に関連する具体的な活動}に挑戦できます！」のように、具体的な活動を例示し、入部を促すこと。
 5.  **活動内容:** 物理研究部は、レゴプログラミングを中心に、物理実験、ロボット大会への参加、自作機器の開発など、多岐にわたる活動をしていることを強調すること。
-6.  **情報の利用:** 部活動の正確な情報や最新情報が必要な場合は、Web検索（提供された情報）を使用して**事実を確認しながら**回答すること。
+6.  **情報の利用:** 部活動の正確な情報や最新情報が必要な場合は、GPTの学習済み知識を利用して回答すること。
 7.  **履歴非保持の通知:** このチャットは前の質問を記憶しません。質問をする際は、**必要な情報を全て含めてください。**
 
 早稲田中高の部活リストの例：
@@ -161,3 +160,4 @@ def index():
 # アプリケーションの実行
 if __name__ == "__main__":
     app.run(debug=True)
+
